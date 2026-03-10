@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Wrench, Calendar, Download, Plus, Settings, FileSpreadsheet } from 'lucide-react';
+import { Wrench, Calendar, Download, Plus, Settings, FileSpreadsheet, LogOut } from 'lucide-react';
 import LogForm from '@/components/LogForm';
 import LogsTable from '@/components/LogsTable';
 import StatsCard from '@/components/StatsCard';
 import ExportSection from '@/components/ExportSection';
 import ConfigModal from '@/components/ConfigModal';
 import { Button } from '@/components/ui/button';
+import { getAuthHeader, logout, isAuthenticated } from '@/utils/auth';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
   const [config, setConfig] = useState({ machines: [], technicians: [], spareParts: [] });
   const [editingLog, setEditingLog] = useState(null);
@@ -20,25 +23,34 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isAuthenticated()) {
+      navigate('/login');
+      return;
+    }
     fetchLogs();
     fetchConfig();
-  }, []);
+  }, [navigate]);
 
   const fetchLogs = async () => {
     try {
-      const response = await axios.get(`${API}/logs`);
+      const response = await axios.get(`${API}/logs`, { headers: getAuthHeader() });
       setLogs(response.data);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching logs:', error);
-      toast.error('Failed to fetch logs');
+      if (error.response?.status === 401) {
+        logout();
+        navigate('/login');
+      } else {
+        toast.error('Failed to fetch logs');
+      }
       setLoading(false);
     }
   };
 
   const fetchConfig = async () => {
     try {
-      const response = await axios.get(`${API}/config`);
+      const response = await axios.get(`${API}/config`, { headers: getAuthHeader() });
       const configData = response.data;
       
       setConfig({
@@ -48,17 +60,21 @@ const Dashboard = () => {
       });
     } catch (error) {
       console.error('Error fetching config:', error);
+      if (error.response?.status === 401) {
+        logout();
+        navigate('/login');
+      }
     }
   };
 
   const handleLogSubmit = async (logData) => {
     try {
       if (editingLog) {
-        await axios.put(`${API}/logs/${editingLog.id}`, logData);
+        await axios.put(`${API}/logs/${editingLog.id}`, logData, { headers: getAuthHeader() });
         toast.success('Log updated successfully');
         setEditingLog(null);
       } else {
-        await axios.post(`${API}/logs`, logData);
+        await axios.post(`${API}/logs`, logData, { headers: getAuthHeader() });
         toast.success('Log added successfully');
       }
       fetchLogs();
@@ -77,13 +93,19 @@ const Dashboard = () => {
     if (!window.confirm('Are you sure you want to delete this log?')) return;
     
     try {
-      await axios.delete(`${API}/logs/${logId}`);
+      await axios.delete(`${API}/logs/${logId}`, { headers: getAuthHeader() });
       toast.success('Log deleted successfully');
       fetchLogs();
     } catch (error) {
       console.error('Error deleting log:', error);
       toast.error('Failed to delete log');
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    toast.success('Logged out successfully');
+    navigate('/login');
   };
 
   const handleCancelEdit = () => {
@@ -125,7 +147,7 @@ const Dashboard = () => {
             Maintenance Log System
           </h1>
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex gap-2">
           <Button
             onClick={() => setShowConfigModal(true)}
             variant="outline"
@@ -134,6 +156,15 @@ const Dashboard = () => {
           >
             <Settings className="w-4 h-4 mr-2" />
             Manage Dropdowns
+          </Button>
+          <Button
+            onClick={handleLogout}
+            variant="outline"
+            className="bg-white/10 border-white/20 hover:bg-white/20 text-white"
+            data-testid="logout-button"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
           </Button>
         </div>
       </header>

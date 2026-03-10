@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { getAuthHeader } from '@/utils/auth';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -30,7 +31,7 @@ const ConfigModal = ({ config, onClose, onUpdate }) => {
       await axios.post(`${API}/config`, {
         name,
         type: typeMap[type]
-      });
+      }, { headers: getAuthHeader() });
       toast.success('Item added successfully');
       setNewItem({ ...newItem, [type]: '' });
       onUpdate();
@@ -42,7 +43,7 @@ const ConfigModal = ({ config, onClose, onUpdate }) => {
 
   const handleDeleteItem = async (id) => {
     try {
-      await axios.delete(`${API}/config/${id}`);
+      await axios.delete(`${API}/config/${id}`, { headers: getAuthHeader() });
       toast.success('Item deleted successfully');
       onUpdate();
     } catch (error) {

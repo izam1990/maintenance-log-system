@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,7 +9,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import jwt
+import bcrypt
 
 
 ROOT_DIR = Path(__file__).parent
@@ -18,8 +21,68 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'maintenance-log-secret-key-change-in-production')
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
+
+security = HTTPBearer()
+
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
+
+
+class User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    username: str
+    password_hash: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class UserRegister(BaseModel):
+    username: str
+    password: str
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        return username
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
 
 class MaintenanceLog(BaseModel):
@@ -74,8 +137,39 @@ async def root():
     return {"message": "Maintenance Log API"}
 
 
+@api_router.post("/auth/register", response_model=Token)
+async def register(user_input: UserRegister):
+    existing_user = await db.users.find_one({"username": user_input.username}, {"_id": 0})
+    
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    user_dict = {
+        "id": str(uuid.uuid4()),
+        "username": user_input.username,
+        "password_hash": hash_password(user_input.password),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.users.insert_one(user_dict)
+    
+    access_token = create_access_token(data={"sub": user_input.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@api_router.post("/auth/login", response_model=Token)
+async def login(user_input: UserLogin):
+    user = await db.users.find_one({"username": user_input.username}, {"_id": 0})
+    
+    if not user or not verify_password(user_input.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    access_token = create_access_token(data={"sub": user_input.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
 @api_router.post("/logs", response_model=MaintenanceLog)
-async def create_log(log_input: MaintenanceLogCreate):
+async def create_log(log_input: MaintenanceLogCreate, current_user: str = Depends(get_current_user)):
     log_dict = log_input.model_dump()
     log_obj = MaintenanceLog(**log_dict)
     
@@ -87,7 +181,7 @@ async def create_log(log_input: MaintenanceLogCreate):
 
 
 @api_router.get("/logs", response_model=List[MaintenanceLog])
-async def get_logs():
+async def get_logs(current_user: str = Depends(get_current_user)):
     logs = await db.maintenance_logs.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     
     for log in logs:
@@ -98,7 +192,7 @@ async def get_logs():
 
 
 @api_router.get("/logs/{log_id}", response_model=MaintenanceLog)
-async def get_log(log_id: str):
+async def get_log(log_id: str, current_user: str = Depends(get_current_user)):
     log = await db.maintenance_logs.find_one({"id": log_id}, {"_id": 0})
     
     if not log:
@@ -111,7 +205,7 @@ async def get_log(log_id: str):
 
 
 @api_router.put("/logs/{log_id}", response_model=MaintenanceLog)
-async def update_log(log_id: str, log_update: MaintenanceLogUpdate):
+async def update_log(log_id: str, log_update: MaintenanceLogUpdate, current_user: str = Depends(get_current_user)):
     existing_log = await db.maintenance_logs.find_one({"id": log_id}, {"_id": 0})
     
     if not existing_log:
@@ -134,7 +228,7 @@ async def update_log(log_id: str, log_update: MaintenanceLogUpdate):
 
 
 @api_router.delete("/logs/{log_id}")
-async def delete_log(log_id: str):
+async def delete_log(log_id: str, current_user: str = Depends(get_current_user)):
     result = await db.maintenance_logs.delete_one({"id": log_id})
     
     if result.deleted_count == 0:
@@ -144,13 +238,13 @@ async def delete_log(log_id: str):
 
 
 @api_router.get("/config", response_model=List[ConfigItem])
-async def get_config():
+async def get_config(current_user: str = Depends(get_current_user)):
     config_items = await db.config_items.find({}, {"_id": 0}).to_list(1000)
     return config_items
 
 
 @api_router.post("/config", response_model=ConfigItem)
-async def create_config(config_input: ConfigItemCreate):
+async def create_config(config_input: ConfigItemCreate, current_user: str = Depends(get_current_user)):
     existing = await db.config_items.find_one(
         {"name": config_input.name, "type": config_input.type},
         {"_id": 0}
@@ -169,7 +263,7 @@ async def create_config(config_input: ConfigItemCreate):
 
 
 @api_router.delete("/config/{config_id}")
-async def delete_config(config_id: str):
+async def delete_config(config_id: str, current_user: str = Depends(get_current_user)):
     result = await db.config_items.delete_one({"id": config_id})
     
     if result.deleted_count == 0:

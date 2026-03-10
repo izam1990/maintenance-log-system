@@ -2,6 +2,7 @@ import { Toaster } from '@/components/ui/sonner';
 import '@/App.css';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from '@/pages/Dashboard';
+import Login from '@/pages/Login';
 import InstallPrompt from '@/components/InstallPrompt';
 
 function App() {
@@ -9,6 +10,7 @@ function App() {
     <div className="App">
       <BrowserRouter>
         <Routes>
+          <Route path="/login" element={<Login />} />
           <Route path="/" element={<Dashboard />} />
         </Routes>
       </BrowserRouter>
