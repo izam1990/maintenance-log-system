@@ -134,7 +134,16 @@ class ConfigItemCreate(BaseModel):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Maintenance Log API"}
+    return {"message": "Maintenance Log API", "status": "online"}
+
+
+@api_router.get("/health")
+async def health_check():
+    try:
+        await db.command('ping')
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
 
 
 @api_router.post("/auth/register", response_model=Token)

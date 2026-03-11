@@ -1,32 +1,21 @@
-const CACHE_NAME = 'maintenance-log-v2';
-const urlsToCache = [
-  '/',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
-];
+const CACHE_NAME = 'maintenance-log-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(urlsToCache).catch(() => {
-          console.log('Failed to cache some resources during install');
-        });
-      })
-  );
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('/api/')) {
+  if (event.request.url.includes('/api/') || 
+      event.request.method !== 'GET' ||
+      event.request.url.includes('posthog') ||
+      event.request.url.includes('emergent')) {
     return;
   }
   
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-cache' })
       .then((response) => {
-        if (response && response.status === 200) {
+        if (response && response.status === 200 && response.type === 'basic') {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseClone);
@@ -41,12 +30,11 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
+          if (cacheName !== CACHE_NAME) {
             return caches.delete(cacheName);
           }
         })
