@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Wrench, Calendar, Download, Plus, Settings, FileSpreadsheet, LogOut } from 'lucide-react';
+import { Wrench, Calendar, Download, Plus, Settings, FileSpreadsheet, LogOut, Shield } from 'lucide-react';
 import LogForm from '@/components/LogForm';
 import LogsTable from '@/components/LogsTable';
 import StatsCard from '@/components/StatsCard';
 import ExportSection from '@/components/ExportSection';
 import ConfigModal from '@/components/ConfigModal';
 import { Button } from '@/components/ui/button';
-import { getAuthHeader, logout, isAuthenticated } from '@/utils/auth';
+import { getAuthHeader, logout, isAuthenticated, isAdmin } from '@/utils/auth';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -166,17 +166,25 @@ const Dashboard = () => {
           <h1 className="text-2xl font-bold uppercase tracking-tight" data-testid="app-title">
             Maintenance Log System
           </h1>
+          {isAdmin() && (
+            <span className="ml-2 px-2 py-1 text-xs bg-blue-600 rounded-sm flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              ADMIN
+            </span>
+          )}
         </div>
         <div className="ml-auto flex gap-2">
-          <Button
-            onClick={() => setShowConfigModal(true)}
-            variant="outline"
-            className="bg-white/10 border-white/20 hover:bg-white/20 text-white"
-            data-testid="config-button"
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            Manage Dropdowns
-          </Button>
+          {isAdmin() && (
+            <Button
+              onClick={() => setShowConfigModal(true)}
+              variant="outline"
+              className="bg-white/10 border-white/20 hover:bg-white/20 text-white"
+              data-testid="config-button"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              Manage Dropdowns
+            </Button>
+          )}
           <Button
             onClick={handleLogout}
             variant="outline"
@@ -228,6 +236,7 @@ const Dashboard = () => {
               onEdit={handleEdit}
               onDelete={handleDelete}
               loading={loading}
+              isAdmin={isAdmin()}
             />
           </div>
         </div>

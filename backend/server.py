@@ -37,6 +37,7 @@ class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     username: str
     password_hash: str
+    role: str = "user"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -53,6 +54,12 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    role: str
+
+
+class UserInfo(BaseModel):
+    username: str
+    role: str
 
 
 def hash_password(password: str) -> str:
@@ -76,13 +83,20 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        role: str = payload.get("role", "user")
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-        return username
+        return {"username": username, "role": role}
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.JWTError:
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+
+
+async def get_admin_user(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    return current_user
 
 
 class MaintenanceLog(BaseModel):
@@ -153,17 +167,21 @@ async def register(user_input: UserRegister):
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already exists")
     
+    user_count = await db.users.count_documents({})
+    role = "admin" if user_count == 0 else "user"
+    
     user_dict = {
         "id": str(uuid.uuid4()),
         "username": user_input.username,
         "password_hash": hash_password(user_input.password),
+        "role": role,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
     await db.users.insert_one(user_dict)
     
-    access_token = create_access_token(data={"sub": user_input.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    access_token = create_access_token(data={"sub": user_input.username, "role": role})
+    return {"access_token": access_token, "token_type": "bearer", "role": role}
 
 
 @api_router.post("/auth/login", response_model=Token)
@@ -173,12 +191,17 @@ async def login(user_input: UserLogin):
     if not user or not verify_password(user_input.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     
-    access_token = create_access_token(data={"sub": user_input.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    access_token = create_access_token(data={"sub": user_input.username, "role": user.get("role", "user")})
+    return {"access_token": access_token, "token_type": "bearer", "role": user.get("role", "user")}
+
+
+@api_router.get("/auth/me", response_model=UserInfo)
+async def get_me(current_user: dict = Depends(get_current_user)):
+    return {"username": current_user["username"], "role": current_user["role"]}
 
 
 @api_router.post("/logs", response_model=MaintenanceLog)
-async def create_log(log_input: MaintenanceLogCreate, current_user: str = Depends(get_current_user)):
+async def create_log(log_input: MaintenanceLogCreate, current_user: dict = Depends(get_current_user)):
     log_dict = log_input.model_dump()
     log_obj = MaintenanceLog(**log_dict)
     
@@ -190,7 +213,7 @@ async def create_log(log_input: MaintenanceLogCreate, current_user: str = Depend
 
 
 @api_router.get("/logs", response_model=List[MaintenanceLog])
-async def get_logs(current_user: str = Depends(get_current_user)):
+async def get_logs(current_user: dict = Depends(get_current_user)):
     logs = await db.maintenance_logs.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     
     for log in logs:
@@ -201,7 +224,7 @@ async def get_logs(current_user: str = Depends(get_current_user)):
 
 
 @api_router.get("/logs/{log_id}", response_model=MaintenanceLog)
-async def get_log(log_id: str, current_user: str = Depends(get_current_user)):
+async def get_log(log_id: str, current_user: dict = Depends(get_current_user)):
     log = await db.maintenance_logs.find_one({"id": log_id}, {"_id": 0})
     
     if not log:
@@ -214,7 +237,7 @@ async def get_log(log_id: str, current_user: str = Depends(get_current_user)):
 
 
 @api_router.put("/logs/{log_id}", response_model=MaintenanceLog)
-async def update_log(log_id: str, log_update: MaintenanceLogUpdate, current_user: str = Depends(get_current_user)):
+async def update_log(log_id: str, log_update: MaintenanceLogUpdate, current_user: dict = Depends(get_admin_user)):
     existing_log = await db.maintenance_logs.find_one({"id": log_id}, {"_id": 0})
     
     if not existing_log:
@@ -237,7 +260,7 @@ async def update_log(log_id: str, log_update: MaintenanceLogUpdate, current_user
 
 
 @api_router.delete("/logs/{log_id}")
-async def delete_log(log_id: str, current_user: str = Depends(get_current_user)):
+async def delete_log(log_id: str, current_user: dict = Depends(get_admin_user)):
     result = await db.maintenance_logs.delete_one({"id": log_id})
     
     if result.deleted_count == 0:
@@ -247,13 +270,13 @@ async def delete_log(log_id: str, current_user: str = Depends(get_current_user))
 
 
 @api_router.get("/config", response_model=List[ConfigItem])
-async def get_config(current_user: str = Depends(get_current_user)):
+async def get_config(current_user: dict = Depends(get_current_user)):
     config_items = await db.config_items.find({}, {"_id": 0}).to_list(1000)
     return config_items
 
 
 @api_router.post("/config", response_model=ConfigItem)
-async def create_config(config_input: ConfigItemCreate, current_user: str = Depends(get_current_user)):
+async def create_config(config_input: ConfigItemCreate, current_user: dict = Depends(get_admin_user)):
     existing = await db.config_items.find_one(
         {"name": config_input.name, "type": config_input.type},
         {"_id": 0}
@@ -272,7 +295,7 @@ async def create_config(config_input: ConfigItemCreate, current_user: str = Depe
 
 
 @api_router.delete("/config/{config_id}")
-async def delete_config(config_id: str, current_user: str = Depends(get_current_user)):
+async def delete_config(config_id: str, current_user: dict = Depends(get_admin_user)):
     result = await db.config_items.delete_one({"id": config_id})
     
     if result.deleted_count == 0:

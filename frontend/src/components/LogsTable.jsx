@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 
-const LogsTable = ({ logs, onEdit, onDelete, loading }) => {
+const LogsTable = ({ logs, onEdit, onDelete, loading, isAdmin }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredLogs = logs.filter(log => {
@@ -61,7 +61,7 @@ const LogsTable = ({ logs, onEdit, onDelete, loading }) => {
                   <th className="py-3 px-4">Spare Parts</th>
                   <th className="py-3 px-4">Total Time</th>
                   <th className="py-3 px-4">Technician</th>
-                  <th className="py-3 px-4 text-center">Actions</th>
+                  {isAdmin && <th className="py-3 px-4 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -92,28 +92,30 @@ const LogsTable = ({ logs, onEdit, onDelete, loading }) => {
                     <td className="py-3 px-4 align-middle" data-testid={`log-technician-${log.id}`}>
                       {log.technician_name}
                     </td>
-                    <td className="py-3 px-4 align-middle">
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          onClick={() => onEdit(log)}
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600"
-                          data-testid={`edit-log-button-${log.id}`}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          onClick={() => onDelete(log.id)}
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
-                          data-testid={`delete-log-button-${log.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </td>
+                    {isAdmin && (
+                      <td className="py-3 px-4 align-middle">
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            onClick={() => onEdit(log)}
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600"
+                            data-testid={`edit-log-button-${log.id}`}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            onClick={() => onDelete(log.id)}
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
+                            data-testid={`delete-log-button-${log.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

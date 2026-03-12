@@ -26,7 +26,14 @@ const Login = () => {
       const response = await axios.post(`${API}${endpoint}`, formData);
       
       localStorage.setItem('token', response.data.access_token);
-      toast.success(isLogin ? 'Login successful!' : 'Registration successful!');
+      localStorage.setItem('role', response.data.role);
+      
+      if (response.data.role === 'admin') {
+        toast.success(isLogin ? 'Welcome Admin!' : 'Admin account created!');
+      } else {
+        toast.success(isLogin ? 'Login successful!' : 'Account created!');
+      }
+      
       navigate('/');
     } catch (error) {
       console.error('Auth error:', error);
