@@ -30,6 +30,9 @@ const LogsTable = ({ logs, onEdit, onDelete, loading, isAdmin }) => {
     setExpandedDescription(null);
   };
 
+  // Row height approximately 48px, 12 rows = 576px + header 48px = 624px
+  const TABLE_MAX_HEIGHT = 624;
+
   return (
     <>
       <Card className="bg-white border border-zinc-200 shadow-sm rounded-md" data-testid="logs-table-card">
@@ -37,6 +40,11 @@ const LogsTable = ({ logs, onEdit, onDelete, loading, isAdmin }) => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <CardTitle className="text-xl font-semibold" data-testid="logs-table-title">
               Maintenance Logs
+              {filteredLogs.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-zinc-500">
+                  ({filteredLogs.length} {filteredLogs.length === 1 ? 'record' : 'records'})
+                </span>
+              )}
             </CardTitle>
             <div className="relative w-full md:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -60,91 +68,92 @@ const LogsTable = ({ logs, onEdit, onDelete, loading, isAdmin }) => {
               {searchTerm ? 'No logs found matching your search.' : 'No logs yet. Add your first maintenance log!'}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <div className="max-h-[600px] overflow-y-auto">
-                <table className="w-full text-sm text-left" data-testid="logs-table">
-                  <thead className="bg-zinc-100 text-zinc-600 uppercase text-xs font-bold tracking-wider sticky top-0 z-10">
-                    <tr>
-                      <th className="py-3 px-4">Date</th>
-                      <th className="py-3 px-4">Machine</th>
-                      <th className="py-3 px-4">Location</th>
-                      <th className="py-3 px-4">Work Description</th>
-                      <th className="py-3 px-4">Spare Parts</th>
-                      <th className="py-3 px-4">Total Time</th>
-                      <th className="py-3 px-4">Technician</th>
-                      {isAdmin && <th className="py-3 px-4 text-center">Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLogs.map((log) => (
-                      <tr
-                        key={log.id}
-                        className="border-b border-zinc-100 hover:bg-zinc-50/80 transition-colors"
-                        data-testid={`log-row-${log.id}`}
+            <div 
+              className="overflow-auto"
+              style={{ maxHeight: `${TABLE_MAX_HEIGHT}px` }}
+            >
+              <table className="w-full text-sm text-left min-w-[900px]" data-testid="logs-table">
+                <thead className="bg-zinc-100 text-zinc-600 uppercase text-xs font-bold tracking-wider sticky top-0 z-10 shadow-sm">
+                  <tr>
+                    <th className="py-3 px-4 bg-zinc-100">Date</th>
+                    <th className="py-3 px-4 bg-zinc-100">Machine</th>
+                    <th className="py-3 px-4 bg-zinc-100">Location</th>
+                    <th className="py-3 px-4 bg-zinc-100 min-w-[200px]">Work Description</th>
+                    <th className="py-3 px-4 bg-zinc-100">Spare Parts</th>
+                    <th className="py-3 px-4 bg-zinc-100">Total Time</th>
+                    <th className="py-3 px-4 bg-zinc-100">Technician</th>
+                    {isAdmin && <th className="py-3 px-4 bg-zinc-100 text-center">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLogs.map((log) => (
+                    <tr
+                      key={log.id}
+                      className="border-b border-zinc-100 hover:bg-zinc-50/80 transition-colors"
+                      data-testid={`log-row-${log.id}`}
+                    >
+                      <td className="py-3 px-4 align-middle whitespace-nowrap" data-testid={`log-date-${log.id}`}>
+                        {format(new Date(log.date), 'MMM dd, yyyy')}
+                      </td>
+                      <td className="py-3 px-4 align-middle font-medium whitespace-nowrap" data-testid={`log-machine-${log.id}`}>
+                        {log.machine_name}
+                      </td>
+                      <td className="py-3 px-4 align-middle whitespace-nowrap" data-testid={`log-location-${log.id}`}>
+                        {log.location}
+                      </td>
+                      <td 
+                        className="py-3 px-4 align-middle max-w-[200px] cursor-pointer hover:bg-blue-50 rounded transition-colors" 
+                        data-testid={`log-description-${log.id}`}
+                        onClick={() => handleDescriptionClick(log)}
+                        title="Click to view full description"
                       >
-                        <td className="py-3 px-4 align-middle whitespace-nowrap" data-testid={`log-date-${log.id}`}>
-                          {format(new Date(log.date), 'MMM dd, yyyy')}
-                        </td>
-                        <td className="py-3 px-4 align-middle font-medium" data-testid={`log-machine-${log.id}`}>
-                          {log.machine_name}
-                        </td>
-                        <td className="py-3 px-4 align-middle" data-testid={`log-location-${log.id}`}>
-                          {log.location}
-                        </td>
-                        <td 
-                          className="py-3 px-4 align-middle max-w-xs cursor-pointer hover:bg-blue-50 rounded transition-colors" 
-                          data-testid={`log-description-${log.id}`}
-                          onClick={() => handleDescriptionClick(log)}
-                          title="Click to view full description"
-                        >
-                          <div className="truncate text-blue-600 underline decoration-dotted underline-offset-2">
-                            {log.work_description}
+                        <div className="truncate text-blue-600 underline decoration-dotted underline-offset-2">
+                          {log.work_description}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 align-middle whitespace-nowrap" data-testid={`log-spare-parts-${log.id}`}>
+                        {log.spare_parts}
+                      </td>
+                      <td className="py-3 px-4 align-middle whitespace-nowrap" data-testid={`log-total-time-${log.id}`}>
+                        {log.total_time}
+                      </td>
+                      <td className="py-3 px-4 align-middle whitespace-nowrap" data-testid={`log-technician-${log.id}`}>
+                        {log.technician_name}
+                      </td>
+                      {isAdmin && (
+                        <td className="py-3 px-4 align-middle">
+                          <div className="flex items-center justify-center gap-2">
+                            <Button
+                              onClick={() => onEdit(log)}
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600"
+                              data-testid={`edit-log-button-${log.id}`}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              onClick={() => onDelete(log.id)}
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
+                              data-testid={`delete-log-button-${log.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </div>
                         </td>
-                        <td className="py-3 px-4 align-middle" data-testid={`log-spare-parts-${log.id}`}>
-                          {log.spare_parts}
-                        </td>
-                        <td className="py-3 px-4 align-middle" data-testid={`log-total-time-${log.id}`}>
-                          {log.total_time}
-                        </td>
-                        <td className="py-3 px-4 align-middle" data-testid={`log-technician-${log.id}`}>
-                          {log.technician_name}
-                        </td>
-                        {isAdmin && (
-                          <td className="py-3 px-4 align-middle">
-                            <div className="flex items-center justify-center gap-2">
-                              <Button
-                                onClick={() => onEdit(log)}
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600"
-                                data-testid={`edit-log-button-${log.id}`}
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                onClick={() => onDelete(log.id)}
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
-                                data-testid={`delete-log-button-${log.id}`}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Description Modal */}
+      {/* Description Modal - Shows full description when clicked */}
       {expandedDescription && (
         <div 
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
@@ -168,7 +177,7 @@ const LogsTable = ({ logs, onEdit, onDelete, loading, isAdmin }) => {
                 <X className="w-5 h-5" />
               </Button>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="p-4 space-y-3 overflow-y-auto max-h-[calc(80vh-60px)]">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div className="text-zinc-500">Date:</div>
                 <div className="font-medium">{format(new Date(expandedDescription.date), 'MMM dd, yyyy')}</div>
@@ -182,7 +191,7 @@ const LogsTable = ({ logs, onEdit, onDelete, loading, isAdmin }) => {
               <hr className="my-3" />
               <div>
                 <div className="text-zinc-500 text-sm mb-2">Full Description:</div>
-                <div className="bg-zinc-50 p-3 rounded-md text-zinc-800 whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+                <div className="bg-zinc-50 p-3 rounded-md text-zinc-800 whitespace-pre-wrap">
                   {expandedDescription.work_description}
                 </div>
               </div>
