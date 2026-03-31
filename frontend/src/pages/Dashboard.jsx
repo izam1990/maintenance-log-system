@@ -230,7 +230,7 @@ const Dashboard = () => {
           </div>
 
           <div className="lg:col-span-8 xl:col-span-9 space-y-6">
-            <ExportSection logs={logs} />
+            {isAdmin() && <ExportSection logs={logs} />}
             <LogsTable
               logs={logs}
               onEdit={handleEdit}
